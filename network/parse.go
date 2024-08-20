@@ -33,7 +33,7 @@ type ParseOpts struct {
 // a parse error is encountered, all ValueLists parsed to this point are
 // returned as well as the error. Unknown "parts" are silently ignored.
 func Parse(b []byte, opts ParseOpts) ([]*api.ValueList, error) {
-	return parse(b, None, opts)
+	return parse(b, None, opts, log.Default())
 }
 
 func readUint16(buf *bytes.Buffer) (uint16, error) {
@@ -44,7 +44,7 @@ func readUint16(buf *bytes.Buffer) (uint16, error) {
 	return binary.BigEndian.Uint16(read), nil
 }
 
-func parse(b []byte, sl SecurityLevel, opts ParseOpts) ([]*api.ValueList, error) {
+func parse(b []byte, sl SecurityLevel, opts ParseOpts, lgr *log.Logger) ([]*api.ValueList, error) {
 	var valueLists []*api.ValueList
 
 	var state api.ValueList
@@ -96,7 +96,7 @@ func parse(b []byte, sl SecurityLevel, opts ParseOpts) ([]*api.ValueList, error)
 			if opts.TypesDB != nil {
 				ds, ok := opts.TypesDB.DataSet(state.Type)
 				if !ok {
-					log.Printf("unable to find %q in TypesDB", state.Type)
+					lgr.Printf("unable to find %q in TypesDB", state.Type)
 					continue
 				}
 
@@ -110,7 +110,7 @@ func parse(b []byte, sl SecurityLevel, opts ParseOpts) ([]*api.ValueList, error)
 				// Returns an error if the number of values is incorrect.
 				v, err := ds.Values(ifValues...)
 				if err != nil {
-					log.Printf("unable to convert metric %q, values %v according to %v in TypesDB: %v", state, ifValues, ds, err)
+					lgr.Printf("unable to convert metric %q, values %v according to %v in TypesDB: %v", state, ifValues, ds, err)
 					continue
 				}
 				vl.Values = v
@@ -243,7 +243,7 @@ func parseSignSHA256(pkg, payload []byte, opts ParseOpts) ([]*api.ValueList, err
 		return nil, errors.New("SHA256 verification failure")
 	}
 
-	return parse(payload, Sign, opts)
+	return parse(payload, Sign, opts, log.Default())
 }
 
 func parseEncryptAES256(payload []byte, opts ParseOpts) ([]*api.ValueList, error) {
@@ -252,7 +252,7 @@ func parseEncryptAES256(payload []byte, opts ParseOpts) ([]*api.ValueList, error
 		return nil, errors.New("AES256 decryption failure")
 	}
 
-	return parse(plaintext, Encrypt, opts)
+	return parse(plaintext, Encrypt, opts, log.Default())
 }
 
 func parseInt(b []byte) (uint64, error) {

@@ -69,7 +69,8 @@ func TestNetwork(t *testing.T) {
 				Password:      password,
 			})
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
+			return
 		}
 
 		vl := &api.ValueList{
