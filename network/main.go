@@ -18,7 +18,7 @@ const (
 const DefaultBufferSize = 1452
 
 // DefaultDispatcherBufferSize is the default depth on the dispatcher channel which
-// asynchronously reades value sets from the main server Listener loop and writes them into the api.Writer
+// asynchronously reads value sets from the main server Listener loop and writes them into the api.Writer
 // This allows high throughput and asynchronous writes without creating the situation where an api.Writer
 // that blocks can cause an infinite buildup go in flight messages and eventual OOM.
 const DefaultDispatcherBufferSize = 1024
