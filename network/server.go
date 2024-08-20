@@ -39,6 +39,15 @@ type Server struct {
 	// Interface is the name of the interface to use when subscribing to a
 	// multicast group. Has no effect when using unicast.
 	Interface string
+
+	// Channel buffer on dispatcher, this limits how many packets/value lists
+	// can be held in flight before we block on reading new value lists from the network.
+	// Defaults to 1024
+	DispatchBufferSize uint
+
+	// Logger defines a log.Logger that can optionally be provided for handling log messages
+	// if none is provided a log.Default() is assigned
+	Logger *log.Logger
 }
 
 // ListenAndWrite listens on the provided UDP connection (or creates one using
@@ -78,6 +87,13 @@ func (srv *Server) ListenAndWrite(ctx context.Context) error {
 	if srv.BufferSize <= 0 {
 		srv.BufferSize = DefaultBufferSize
 	}
+	if srv.DispatchBufferSize <= 0 {
+		srv.BufferSize = DefaultDispatcherBufferSize
+	}
+
+	if srv.Logger == nil {
+		srv.Logger = log.Default()
+	}
 
 	popts := ParseOpts{
 		PasswordLookup: srv.PasswordLookup,
@@ -94,11 +110,17 @@ func (srv *Server) ListenAndWrite(ctx context.Context) error {
 	}()
 
 	var wg sync.WaitGroup
+
+	valueListChan := make(chan []*api.ValueList, srv.DispatchBufferSize)
+	wg.Add(1)
+	go srv.dispatcher(ctx, &wg, valueListChan)
+
 	for {
 		buf := make([]byte, srv.BufferSize)
 		n, err := srv.Conn.Read(buf)
 		if err != nil {
 			srv.Conn.Close()
+			close(valueListChan)
 			wg.Wait()
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -108,22 +130,26 @@ func (srv *Server) ListenAndWrite(ctx context.Context) error {
 
 		valueLists, err := Parse(buf[:n], popts)
 		if err != nil {
-			log.Printf("error while parsing: %v", err)
+			srv.Logger.Printf("error while parsing: %v", err)
 			continue
 		}
-
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			dispatch(ctx, valueLists, srv.Writer)
-		}()
+		select {
+		case <-ctx.Done():
+			//if the context closed, just continue, we will clean up on the next loop iteration
+			//when the srv.Conn.Read fails
+		case valueListChan <- valueLists:
+			//ALL good, we wrote to the channel
+		}
 	}
 }
 
-func dispatch(ctx context.Context, valueLists []*api.ValueList, d api.Writer) {
-	for _, vl := range valueLists {
-		if err := d.Write(ctx, vl); err != nil {
-			log.Printf("error while dispatching: %v", err)
+func (srv *Server) dispatcher(ctx context.Context, wg *sync.WaitGroup, valueListChan chan []*api.ValueList) {
+	defer wg.Done()
+	for vl := range valueListChan {
+		for _, v := range vl {
+			if err := srv.Writer.Write(ctx, v); err != nil {
+				srv.Logger.Printf("error while dispatching: %v", err)
+			}
 		}
 	}
 }

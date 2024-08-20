@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
 	"sync"
@@ -32,8 +31,8 @@ type PasswordLookup interface {
 // The file has a very simple syntax with one username / password mapping per
 // line, separated by a colon. For example:
 //
-//   alice: w0nderl4nd
-//   bob:   bu1|der
+//	alice: w0nderl4nd
+//	bob:   bu1|der
 type AuthFile struct {
 	name string
 	last time.Time
@@ -178,7 +177,6 @@ func createCipher(password string, iv []byte) (cipher.Stream, error) {
 func encryptAES256(plaintext []byte, username, password string) ([]byte, error) {
 	iv := make([]byte, 16)
 	if _, err := rand.Read(iv); err != nil {
-		log.Printf("rand.Read: %v", err)
 		return nil, err
 	}
 
